@@ -1,55 +1,60 @@
 @echo off
 
+set PASSWORD=123456
+
 REM mysql安装目录及mysql程序路径
-Set MYSQL_HOME="D:\PC_webserver\mysql"
-Set MYSQL="%MYSQL_HOME%\bin\mysql.exe"
+set MYSQL_HOME=D:\PC_webserver\mysql
+set MYSQL_BIN=%MYSQL_HOME%\bin
 
 REM 服务名称
-Set SERVICE_NAME="mysql" 
+set SERVICE_NAME=mysql
 
-echo step 1
-echo -------------------------------------
-echo 设置配置文件，跳过登录验证
-echo.
-echo [mysqld] 
-echo ...
-echo skip-grant-tables
-echo ...
+REM 修改配置文件
+set OFILE=%MYSQL_HOME%\my.ini
+set TFILE=%MYSQL_HOME%\tmp_my.ini
+set BFEX=.back
 
-echo.
-start /max "" "%MYSQL_HOME%"
+if not exist "%OFILE%" (
+	echo not find %OFILE%
+	pause >nul
+	goto :EOF
+)
+
+for /F %%I in ("%OFILE%") do set OFN=%%~nI%%~xI
+
+set /p a=<nul >"%TFILE%"
+
+for /F "eol=# delims=" %%I in ('type "%OFILE%"') do (
+	echo %%I >>"%TFILE%"
+	if "%%I" == "[mysqld]" echo skip-grant-tables >>"%TFILE%"
+)
+
+copy "%OFILE%" "%OFILE%%BFEX%" >nul && del "%OFILE%" && ren "%TFILE%" "%OFN%"
+
+if exist "%OFILE%%BFEX%" (
+	echo alter my.ini ok
+) else (
+	echo alter my.ini no
+)
+
+
+rem 重启服务
+call :RESTART "%SERVICE_NAME%"
+
+rem 重置密码
+cd /d "%MYSQL_BIN%"
+mysql --user=root -e "use mysql; UPDATE user SET Password = Password ( '%PASSWORD%' ) WHERE User = 'root'; flush privileges;"
+
+REM 还原配置文件
+del "%OFILE%" && ren "%OFILE%%BFEX%" "%OFN%"
+
+rem 重启服务
+call :RESTART "%SERVICE_NAME%"
 
 pause >nul
+goto :EOF
 
-echo.
-echo step 2
-echo -------------------------------------
-echo 重启服务
-net stop %SERVICE_NAME%
-net start %SERVICE_NAME%
-
-echo step 3
-echo -------------------------------------
-echo 等录mysql管理命令行，执行一下语句
-echo .
-echo USE mysql
-echo UPDATE user SET Password = password ( '123456' ) WHERE User = 'root';
-echo flush privileges;
-echo quit
-
-echo.
-%MYSQL% -u root
-
-echo.
-echo step 4
-echo -------------------------------------
-echo 设置配置文件，注释跳过登录验证，重启服务
-echo.
-echo [mysqld] 
-echo ...
-echo #skip-grant-tables
-echo ...
-
-pause >nul
-net stop %SERVICE_NAME%
-net start %SERVICE_NAME%
+:RESTART
+net stop %1
+net start %1
+goto :EOF
